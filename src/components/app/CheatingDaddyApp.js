@@ -629,8 +629,8 @@ export class CheatingDaddyApp extends LitElement {
         this.currentView = 'assistant';
         this._startTimer();
         this._availableModels = await this._buildAvailableModels();
-        const prefs = await cheatingDaddy.storage.getPreferences();
-        this._activeModel = prefs.selectedChatModel || 'auto';
+        const startPrefs = await cheatingDaddy.storage.getPreferences();
+        this._activeModel = startPrefs.selectedChatModel || 'auto';
     }
 
     async handleAPIKeyHelp() {

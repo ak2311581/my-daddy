@@ -6,7 +6,15 @@
       "Bash(Format-Table -AutoSize)",
       "Bash(node -e \"const s = require\\('./src/storage'\\); console.log\\('claudeApiKey default:', s.getClaudeApiKey\\(\\)\\); console.log\\('selectedChatModel default:', s.getSelectedChatModel\\(\\)\\);\")",
       "Bash(node -e \"const g = require\\('./src/utils/gemini'\\); console.log\\('gemini module loaded ok, exports:', Object.keys\\(g\\).join\\(', '\\)\\);\")",
-      "Bash(node -e \"const w = require\\('./src/utils/window'\\); console.log\\('Default keybinds:', JSON.stringify\\(w.getDefaultKeybinds\\(\\), null, 2\\)\\);\")"
+      "Bash(node -e \"const w = require\\('./src/utils/window'\\); console.log\\('Default keybinds:', JSON.stringify\\(w.getDefaultKeybinds\\(\\), null, 2\\)\\);\")",
+      "Bash(node --check src/index.js)",
+      "Bash(node --check src/storage.js)",
+      "Bash(node --check src/utils/gemini.js)",
+      "Bash(node --check src/utils/window.js)",
+      "Bash(node --check src/utils/renderer.js)",
+      "Bash(node -e ' *)",
+      "Bash(dir script.js)",
+      "Bash(dir assets\\\\*.js)"
     ]
   }
 }

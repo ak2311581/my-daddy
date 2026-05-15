@@ -14,6 +14,7 @@ const DEFAULT_CONFIG = {
 const DEFAULT_CREDENTIALS = {
     apiKey: '',
     groqApiKey: '',
+    groqApiKeys: [],
     claudeApiKey: ''
 };
 
@@ -199,12 +200,33 @@ function setApiKey(apiKey) {
     return setCredentials({ apiKey });
 }
 
+function getGroqApiKeys() {
+    const creds = getCredentials();
+    // Migrate single key to array on first access
+    if (creds.groqApiKeys && creds.groqApiKeys.length > 0) {
+        return creds.groqApiKeys;
+    }
+    if (creds.groqApiKey && creds.groqApiKey.trim()) {
+        return [creds.groqApiKey.trim()];
+    }
+    return [];
+}
+
+function setGroqApiKeys(keys) {
+    const filtered = (keys || []).map(k => k.trim()).filter(k => k.length > 0);
+    return setCredentials({ groqApiKeys: filtered, groqApiKey: filtered[0] || '' });
+}
+
 function getGroqApiKey() {
-    return getCredentials().groqApiKey || '';
+    const keys = getGroqApiKeys();
+    return keys[0] || '';
 }
 
 function setGroqApiKey(groqApiKey) {
-    return setCredentials({ groqApiKey });
+    const trimmed = (groqApiKey || '').trim();
+    const existing = getGroqApiKeys().filter(k => k !== trimmed);
+    const keys = trimmed ? [trimmed, ...existing] : existing;
+    return setGroqApiKeys(keys);
 }
 
 function getClaudeApiKey() {
@@ -516,6 +538,8 @@ module.exports = {
     setApiKey,
     getGroqApiKey,
     setGroqApiKey,
+    getGroqApiKeys,
+    setGroqApiKeys,
     getClaudeApiKey,
     setClaudeApiKey,
     getSelectedChatModel,

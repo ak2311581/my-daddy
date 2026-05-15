@@ -180,6 +180,68 @@ export class MainView extends LitElement {
             text-decoration: underline;
         }
 
+        .key-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .key-row input {
+            flex: 1;
+        }
+
+        .key-remove {
+            flex-shrink: 0;
+            width: 26px;
+            height: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+            transition: color var(--transition), border-color var(--transition);
+        }
+
+        .key-remove:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .key-add {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: transparent;
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: var(--font-size-xs);
+            padding: 4px 8px;
+            transition: color var(--transition), border-color var(--transition);
+            width: 100%;
+        }
+
+        .key-add:hover {
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .key-badge {
+            font-size: 10px;
+            color: var(--text-muted);
+            background: var(--bg-elevated);
+            border-radius: 3px;
+            padding: 1px 4px;
+            flex-shrink: 0;
+        }
+
         .whisper-label-row {
             display: flex;
             align-items: center;
@@ -490,7 +552,7 @@ export class MainView extends LitElement {
         _mode: { state: true },
         _token: { state: true },
         _geminiKey: { state: true },
-        _groqKey: { state: true },
+        _groqKeys: { state: true },
         _openaiKey: { state: true },
         _tokenError: { state: true },
         _keyError: { state: true },
@@ -514,7 +576,7 @@ export class MainView extends LitElement {
         this._mode = 'byok';
         this._token = '';
         this._geminiKey = '';
-        this._groqKey = '';
+        this._groqKeys = [''];
         this._claudeKey = '';
         this._openaiKey = '';
         this._tokenError = false;
@@ -550,7 +612,8 @@ export class MainView extends LitElement {
             // Load keys
             this._token = creds.cloudToken || '';
             this._geminiKey = await cheatingDaddy.storage.getApiKey().catch(() => '') || '';
-            this._groqKey = await cheatingDaddy.storage.getGroqApiKey().catch(() => '') || '';
+            const loadedKeys = await cheatingDaddy.storage.getGroqApiKeys().catch(() => []);
+            this._groqKeys = loadedKeys.length > 0 ? loadedKeys : [''];
             this._claudeKey = await cheatingDaddy.storage.getClaudeApiKey().catch(() => '') || '';
             this._openaiKey = creds.openaiKey || '';
 
@@ -713,9 +776,23 @@ export class MainView extends LitElement {
         this.requestUpdate();
     }
 
-    async _saveGroqKey(val) {
-        this._groqKey = val;
-        await cheatingDaddy.storage.setGroqApiKey(val);
+    async _updateGroqKey(index, val) {
+        const keys = [...this._groqKeys];
+        keys[index] = val;
+        this._groqKeys = keys;
+        await cheatingDaddy.storage.setGroqApiKeys(keys.filter(k => k.trim()));
+        this.requestUpdate();
+    }
+
+    async _addGroqKey() {
+        this._groqKeys = [...this._groqKeys, ''];
+        this.requestUpdate();
+    }
+
+    async _removeGroqKey(index) {
+        const keys = this._groqKeys.filter((_, i) => i !== index);
+        this._groqKeys = keys.length > 0 ? keys : [''];
+        await cheatingDaddy.storage.setGroqApiKeys(this._groqKeys.filter(k => k.trim()));
         this.requestUpdate();
     }
 
@@ -844,15 +921,28 @@ export class MainView extends LitElement {
             </div>
 
             <div class="form-group">
-                <label class="form-label">Groq API Key</label>
-                <input
-                    type="password"
-                    placeholder="Optional"
-                    .value=${this._groqKey}
-                    @input=${e => this._saveGroqKey(e.target.value)}
-                />
-                <div class="form-hint">
+                <label class="form-label">Groq API Keys <span style="opacity:0.5;font-weight:400;text-transform:none;letter-spacing:0">Optional · rotates on rate limit</span></label>
+                ${this._groqKeys.map((key, i) => html`
+                    <div class="key-row" style="margin-bottom:4px">
+                        <span class="key-badge">#${i + 1}</span>
+                        <input
+                            type="password"
+                            placeholder="gsk_..."
+                            .value=${key}
+                            @input=${e => this._updateGroqKey(i, e.target.value)}
+                        />
+                        ${this._groqKeys.length > 1 ? html`
+                            <button class="key-remove" @click=${() => this._removeGroqKey(i)} title="Remove">×</button>
+                        ` : ''}
+                    </div>
+                `)}
+                <button class="key-add" @click=${() => this._addGroqKey()}>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add another key
+                </button>
+                <div class="form-hint" style="margin-top:4px">
                     <span class="link" @click=${() => this.onExternalLink('https://console.groq.com/keys')}>Get Groq key</span>
+                    · if one key hits rate limit, next key is tried automatically
                 </div>
             </div>
 

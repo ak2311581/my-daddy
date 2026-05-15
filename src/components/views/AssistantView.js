@@ -19,6 +19,7 @@ export class AssistantView extends LitElement {
         .response-container {
             flex: 1;
             overflow-y: auto;
+            overflow-x: hidden;
             font-size: var(--response-font-size, 15px);
             line-height: var(--line-height);
             background: var(--bg-app);
@@ -27,6 +28,8 @@ export class AssistantView extends LitElement {
             user-select: text;
             cursor: text;
             color: var(--text-primary);
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
 
         .response-container * {
@@ -129,6 +132,8 @@ export class AssistantView extends LitElement {
             border-collapse: collapse;
             width: 100%;
             margin: 0.8em 0;
+            display: block;
+            overflow-x: auto;
         }
 
         .response-container th,
@@ -504,10 +509,15 @@ export class AssistantView extends LitElement {
                 return rendered;
             } catch (error) {
                 console.warn('Error parsing markdown:', error);
-                return content;
             }
         }
-        return content;
+        // Fallback: escape HTML entities and preserve line breaks
+        const escaped = content
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\n/g, '<br>');
+        return `<div style="white-space:pre-wrap;word-break:break-word">${escaped}</div>`;
     }
 
     wrapWordsInSpans(html) {

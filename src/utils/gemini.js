@@ -3,7 +3,7 @@ const { BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const { saveDebugAudio } = require('../audioUtils');
 const { getSystemPrompt } = require('./prompts');
-const { getAvailableModel, incrementLimitCount, getApiKey, getGroqApiKey, incrementCharUsage, getModelForToday, getClaudeApiKey, getSelectedChatModel } = require('../storage');
+const { getAvailableModel, incrementLimitCount, getApiKey, getGroqApiKey, getGroqApiKeys, incrementCharUsage, getModelForToday, getClaudeApiKey, getSelectedChatModel } = require('../storage');
 const { connectCloud, sendCloudAudio, sendCloudText, sendCloudImage, closeCloud, isCloudActive, setOnTurnComplete } = require('./cloud');
 
 // Lazy-loaded to avoid circular dependency (localai.js imports from gemini.js)
@@ -202,8 +202,7 @@ async function getStoredSetting(key, defaultValue) {
 
 // helper to check if groq has been configured
 function hasGroqKey() {
-    const key = getGroqApiKey();
-    return key && key.trim() != ''
+    return getGroqApiKeys().length > 0;
 }
 
 function hasClaudeKey() {
@@ -214,7 +213,7 @@ function hasClaudeKey() {
 function resolveTextModel() {
     const selected = getSelectedChatModel();
     const claudeKey = getClaudeApiKey();
-    const groqKey = getGroqApiKey();
+    const hasGroq = hasGroqKey();
 
     if (selected !== 'auto') {
         if (selected.startsWith('claude-') && claudeKey) {
@@ -223,14 +222,14 @@ function resolveTextModel() {
         if (selected === 'gemma-3-27b-it') {
             return { provider: 'gemma', model: selected };
         }
-        if (groqKey) {
+        if (hasGroq) {
             return { provider: 'groq', model: selected };
         }
     }
 
     // auto mode
     if (claudeKey) return { provider: 'claude', model: 'claude-sonnet-4-6' };
-    if (groqKey) return { provider: 'groq', model: getModelForToday() || 'qwen/qwen3-32b' };
+    if (hasGroq) return { provider: 'groq', model: getModelForToday() || 'qwen/qwen3-32b' };
     return { provider: 'gemma', model: 'gemma-3-27b-it' };
 }
 
@@ -345,9 +344,9 @@ function stripThinkingTags(text) {
 }
 
 async function sendToGroq(transcription) {
-    const groqApiKey = getGroqApiKey();
-    if (!groqApiKey) {
-        console.log('No Groq API key configured, skipping Groq response');
+    const groqApiKeys = getGroqApiKeys();
+    if (groqApiKeys.length === 0) {
+        console.log('No Groq API keys configured, skipping Groq response');
         return;
     }
 
@@ -363,60 +362,65 @@ async function sendToGroq(transcription) {
         return;
     }
 
-    console.log(`Sending to Groq (${modelToUse}):`, transcription.substring(0, 100) + '...');
-
-    groqConversationHistory.push({
-        role: 'user',
-        content: transcription.trim()
-    });
-
+    groqConversationHistory.push({ role: 'user', content: transcription.trim() });
     if (groqConversationHistory.length > 20) {
         groqConversationHistory = groqConversationHistory.slice(-20);
     }
 
-    try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${groqApiKey}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model: modelToUse,
-                messages: [
-                    { role: 'system', content: currentSystemPrompt || 'You are a helpful assistant.' },
-                    ...groqConversationHistory
-                ],
-                stream: true,
-                temperature: 0.7,
-                max_tokens: 1024
-            })
-        });
+    const body = JSON.stringify({
+        model: modelToUse,
+        messages: [
+            { role: 'system', content: currentSystemPrompt || 'You are a helpful assistant.' },
+            ...groqConversationHistory
+        ],
+        stream: true,
+        temperature: 0.7,
+        max_tokens: 1024
+    });
 
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Groq API error:', response.status, errorText);
-            sendToRenderer('update-status', `Groq error: ${response.status}`);
-            return;
-        }
+    let lastError = null;
+    for (let i = 0; i < groqApiKeys.length; i++) {
+        const apiKey = groqApiKeys[i];
+        console.log(`Sending to Groq (${modelToUse}) with key #${i + 1}:`, transcription.substring(0, 100) + '...');
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullText = '';
-        let isFirst = true;
+        try {
+            const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+                body
+            });
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+            if (response.status === 429) {
+                const errorText = await response.text();
+                console.warn(`Groq key #${i + 1} rate limited (429):`, errorText);
+                lastError = `rate limited (key ${i + 1}/${groqApiKeys.length})`;
+                if (i < groqApiKeys.length - 1) {
+                    sendToRenderer('update-status', `Groq key ${i + 1} rate limited, trying key ${i + 2}...`);
+                }
+                continue;
+            }
 
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Groq API error (key #${i + 1}):`, response.status, errorText);
+                sendToRenderer('update-status', `Groq error: ${response.status}`);
+                return;
+            }
 
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
+            let isFirst = true;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
                     const data = line.slice(6);
                     if (data === '[DONE]') continue;
-
                     try {
                         const json = JSON.parse(data);
                         const token = json.choices?.[0]?.delta?.content || '';
@@ -428,39 +432,34 @@ async function sendToGroq(transcription) {
                                 isFirst = false;
                             }
                         }
-                    } catch (parseError) {
-                        // Skip invalid JSON chunks
-                    }
+                    } catch (parseError) {}
                 }
             }
+
+            const cleanedResponse = stripThinkingTags(fullText);
+            const modelKey = modelToUse.split('/').pop();
+            const systemPromptChars = (currentSystemPrompt || 'You are a helpful assistant.').length;
+            const historyChars = groqConversationHistory.reduce((sum, msg) => sum + (msg.content || '').length, 0);
+            incrementCharUsage('groq', modelKey, systemPromptChars + historyChars + cleanedResponse.length);
+
+            if (cleanedResponse) {
+                groqConversationHistory.push({ role: 'assistant', content: cleanedResponse });
+                saveConversationTurn(transcription, cleanedResponse);
+            }
+
+            console.log(`Groq response completed (${modelToUse}) with key #${i + 1}`);
+            sendToRenderer('update-status', 'Listening...');
+            return;
+
+        } catch (error) {
+            console.error(`Error calling Groq API (key #${i + 1}):`, error);
+            lastError = error.message;
         }
-
-        const cleanedResponse = stripThinkingTags(fullText);
-        const modelKey = modelToUse.split('/').pop();
-
-        const systemPromptChars = (currentSystemPrompt || 'You are a helpful assistant.').length;
-        const historyChars = groqConversationHistory.reduce((sum, msg) => sum + (msg.content || '').length, 0);
-        const inputChars = systemPromptChars + historyChars;
-        const outputChars = cleanedResponse.length;
-
-        incrementCharUsage('groq', modelKey, inputChars + outputChars);
-
-        if (cleanedResponse) {
-            groqConversationHistory.push({
-                role: 'assistant',
-                content: cleanedResponse
-            });
-
-            saveConversationTurn(transcription, cleanedResponse);
-        }
-
-        console.log(`Groq response completed (${modelToUse})`);
-        sendToRenderer('update-status', 'Listening...');
-
-    } catch (error) {
-        console.error('Error calling Groq API:', error);
-        sendToRenderer('update-status', 'Groq error: ' + error.message);
     }
+
+    // All keys exhausted
+    sendToRenderer('update-status', `Groq: all keys rate limited or failed`);
+    console.error('All Groq API keys failed. Last error:', lastError);
 }
 
 async function sendToGemma(transcription) {

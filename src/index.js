@@ -137,6 +137,23 @@ function setupStorageIpcHandlers() {
         }
     });
 
+    ipcMain.handle('storage:get-groq-api-keys', async () => {
+        try {
+            return { success: true, data: storage.getGroqApiKeys() };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:set-groq-api-keys', async (event, keys) => {
+        try {
+            storage.setGroqApiKeys(keys);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     ipcMain.handle('storage:get-claude-api-key', async () => {
         try {
             return { success: true, data: storage.getClaudeApiKey() };
