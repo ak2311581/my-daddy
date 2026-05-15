@@ -186,7 +186,18 @@
     </head>
     <body>
         <script src="assets/marked-4.3.0.min.js"></script>
+        <script>
+            // In Electron (nodeIntegration:true) UMD bundles export via module.exports, not window globals.
+            if (!window.marked && typeof require !== 'undefined') {
+                try { window.marked = require('./assets/marked-4.3.0.min.js'); } catch(e) {}
+            }
+        </script>
         <script src="assets/highlight-11.9.0.min.js"></script>
+        <script>
+            if (!window.hljs && typeof require !== 'undefined') {
+                try { window.hljs = require('./assets/highlight-11.9.0.min.js'); } catch(e) {}
+            }
+        </script>
         <link rel="stylesheet" href="assets/highlight-vscode-dark.min.css" />
         <script type="module" src="components/app/CheatingDaddyApp.js"></script>
 

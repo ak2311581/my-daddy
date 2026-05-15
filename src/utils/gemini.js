@@ -16,6 +16,12 @@ function getLocalAi() {
 // Provider mode: 'byok', 'cloud', or 'local'
 let currentProviderMode = 'byok';
 
+// Detailed mode flag
+let isDetailedMode = false;
+module.exports.setDetailedMode = (v) => { isDetailedMode = !!v; };
+
+const DETAIL_SUFFIX = '\n\nProvide a thorough, detailed answer: include explanations, examples, and cover all relevant aspects comprehensively.';
+
 // Groq conversation history for context
 let groqConversationHistory = [];
 
@@ -255,7 +261,7 @@ async function sendToClaude(transcription, model) {
             body: JSON.stringify({
                 model,
                 max_tokens: 1024,
-                system: currentSystemPrompt || 'You are a helpful assistant.',
+                system: (currentSystemPrompt || 'You are a helpful assistant.') + (isDetailedMode ? DETAIL_SUFFIX : ''),
                 messages: groqConversationHistory,
                 stream: true,
             }),
@@ -370,7 +376,7 @@ async function sendToGroq(transcription) {
     const body = JSON.stringify({
         model: modelToUse,
         messages: [
-            { role: 'system', content: currentSystemPrompt || 'You are a helpful assistant.' },
+            { role: 'system', content: (currentSystemPrompt || 'You are a helpful assistant.') + (isDetailedMode ? DETAIL_SUFFIX : '') },
             ...groqConversationHistory
         ],
         stream: true,
@@ -491,7 +497,7 @@ async function sendToGemma(transcription) {
             parts: [{ text: msg.content }]
         }));
 
-        const systemPrompt = currentSystemPrompt || 'You are a helpful assistant.';
+        const systemPrompt = (currentSystemPrompt || 'You are a helpful assistant.') + (isDetailedMode ? DETAIL_SUFFIX : '');
         const messagesWithSystem = [
             { role: 'user', parts: [{ text: systemPrompt }] },
             { role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] },

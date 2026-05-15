@@ -328,6 +328,16 @@ function setupGeneralIpcHandlers() {
         }
     });
 
+    ipcMain.handle('set-detailed-mode', async (_, val) => {
+        try {
+            const gemini = require('./utils/gemini');
+            gemini.setDetailedMode(val);
+            return { success: true };
+        } catch (error) {
+            return { success: false, error: error.message };
+        }
+    });
+
     // Debug logging from renderer
     ipcMain.on('log-message', (event, msg) => {
         console.log(msg);

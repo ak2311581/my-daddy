@@ -365,6 +365,35 @@ export class AssistantView extends LitElement {
             color: var(--text-primary);
         }
 
+        .detail-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0 10px;
+            border-radius: 100px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            font-size: var(--font-size-xs);
+            font-family: var(--font-mono);
+            white-space: nowrap;
+            transition: border-color var(--transition), color var(--transition), background var(--transition);
+            flex-shrink: 0;
+            gap: 4px;
+        }
+
+        .detail-btn:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+
+        .detail-btn.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
         .model-picker {
             position: absolute;
             bottom: 68px;
@@ -460,6 +489,7 @@ export class AssistantView extends LitElement {
         availableModels: { type: Array },
         onChangeModel: { type: Function },
         _showModelPicker: { state: true },
+        _detailedMode: { state: true },
     };
 
     constructor() {
@@ -475,7 +505,16 @@ export class AssistantView extends LitElement {
         this.availableModels = [];
         this.onChangeModel = () => {};
         this._showModelPicker = false;
+        this._detailedMode = false;
         this._animFrame = null;
+    }
+
+    async _toggleDetailedMode() {
+        this._detailedMode = !this._detailedMode;
+        if (window.require) {
+            const { ipcRenderer } = window.require('electron');
+            await ipcRenderer.invoke('set-detailed-mode', this._detailedMode);
+        }
     }
 
     getProfileNames() {
@@ -497,27 +536,70 @@ export class AssistantView extends LitElement {
     }
 
     renderMarkdown(content) {
-        if (typeof window !== 'undefined' && window.marked) {
+        if (!content) return '';
+
+        // Resolve marked: window.marked may not be set in Electron (UMD exports via module.exports).
+        let markedLib = (typeof window !== 'undefined' && window.marked) ? window.marked : null;
+        if (!markedLib && typeof require !== 'undefined') {
+            try { markedLib = require('../../assets/marked-4.3.0.min.js'); } catch (e) {}
+        }
+
+        if (markedLib && typeof markedLib.parse === 'function') {
+            let rendered = null;
             try {
-                window.marked.setOptions({
-                    breaks: true,
-                    gfm: true,
-                    sanitize: false,
-                });
-                let rendered = window.marked.parse(content);
-                rendered = this.wrapWordsInSpans(rendered);
-                return rendered;
-            } catch (error) {
-                console.warn('Error parsing markdown:', error);
+                markedLib.setOptions({ breaks: true, gfm: true });
+                rendered = markedLib.parse(content);
+            } catch (e) {
+                console.warn('marked.parse failed:', e);
+            }
+            if (rendered != null) {
+                try {
+                    return this.wrapWordsInSpans(rendered);
+                } catch (e) {
+                    return rendered;
+                }
             }
         }
-        // Fallback: escape HTML entities and preserve line breaks
-        const escaped = content
+
+        // Basic inline fallback: converts common markdown so it never shows raw syntax
+        return this._basicMarkdown(content);
+    }
+
+    _basicMarkdown(text) {
+        const escaped = text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br>');
-        return `<div style="white-space:pre-wrap;word-break:break-word">${escaped}</div>`;
+            .replace(/>/g, '&gt;');
+
+        const lines = escaped.split('\n');
+        const out = [];
+        let inUl = false;
+
+        for (const raw of lines) {
+            const line = raw.trimEnd();
+            const listMatch = line.match(/^(\s*)[-*]\s+(.*)/);
+            if (listMatch) {
+                if (!inUl) { out.push('<ul>'); inUl = true; }
+                out.push('<li>' + this._inlineMarkdown(listMatch[2]) + '</li>');
+            } else {
+                if (inUl) { out.push('</ul>'); inUl = false; }
+                if (line.trim() === '') {
+                    out.push('<br>');
+                } else {
+                    out.push('<p>' + this._inlineMarkdown(line) + '</p>');
+                }
+            }
+        }
+        if (inUl) out.push('</ul>');
+        return out.join('');
+    }
+
+    _inlineMarkdown(text) {
+        return text
+            .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`(.+?)`/g, '<code>$1</code>');
     }
 
     wrapWordsInSpans(html) {
@@ -934,6 +1016,14 @@ export class AssistantView extends LitElement {
                         ${this._getModelShortLabel(this.activeModel)}
                     </button>
                 ` : ''}
+                <button
+                    class="detail-btn ${this._detailedMode ? 'active' : ''}"
+                    @click=${() => this._toggleDetailedMode()}
+                    title=${this._detailedMode ? 'Detailed mode — click for brief' : 'Brief mode — click for detailed'}
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+                    ${this._detailedMode ? 'Detailed' : 'Brief'}
+                </button>
                 <button class="analyze-btn ${this.isAnalyzing || this.isPaused ? 'analyzing' : ''}" @click=${this.handleScreenAnswer} ?disabled=${this.isPaused}>
                     <canvas class="analyze-canvas"></canvas>
                     <span class="analyze-btn-content">

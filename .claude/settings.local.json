@@ -14,7 +14,10 @@
       "Bash(node --check src/utils/renderer.js)",
       "Bash(node -e ' *)",
       "Bash(dir script.js)",
-      "Bash(dir assets\\\\*.js)"
+      "Bash(dir assets\\\\*.js)",
+      "Bash(node -e \"const m = require\\('./src/assets/marked-4.3.0.min.js'\\); console.log\\('type:', typeof m\\); console.log\\('keys:', Object.keys\\(m\\).slice\\(0,10\\)\\); console.log\\('parse type:', typeof m.parse\\); const r = m.parse\\('**bold** text\\\\n- item'\\); console.log\\('result type:', typeof r\\); console.log\\('result:', r\\);\")",
+      "Bash(node -e \"const m = require\\('./src/assets/marked-4.3.0.min.js'\\); console.log\\('setOptions:', typeof m.setOptions\\); try { m.setOptions\\({ breaks: true, gfm: true }\\); console.log\\('setOptions OK'\\); } catch\\(e\\) { console.log\\('setOptions THREW:', e.message\\); } const r = m.parse\\('**Asif Khan**: hello\\\\n- item one\\\\n- item two'\\); console.log\\(r\\);\")",
+      "Bash(node *)"
     ]
   }
 }
