@@ -363,6 +363,7 @@ export class CheatingDaddyApp extends LitElement {
         _storageLoaded: { state: true },
         _updateAvailable: { state: true },
         _whisperDownloading: { state: true },
+        _isPaused: { state: true },
     };
 
     constructor() {
@@ -388,6 +389,7 @@ export class CheatingDaddyApp extends LitElement {
         this._timerInterval = null;
         this._updateAvailable = false;
         this._whisperDownloading = false;
+        this._isPaused = false;
         this._localVersion = '';
 
         this._loadFromStorage();
@@ -451,6 +453,7 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.on('click-through-toggled', (_, isEnabled) => { this._isClickThrough = isEnabled; });
             ipcRenderer.on('reconnect-failed', (_, data) => this.addNewResponse(data.message));
             ipcRenderer.on('whisper-downloading', (_, downloading) => { this._whisperDownloading = downloading; });
+            ipcRenderer.on('toggle-pause', () => this.handleTogglePause());
         }
     }
 
@@ -465,6 +468,7 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.removeAllListeners('click-through-toggled');
             ipcRenderer.removeAllListeners('reconnect-failed');
             ipcRenderer.removeAllListeners('whisper-downloading');
+            ipcRenderer.removeAllListeners('toggle-pause');
         }
     }
 
@@ -667,6 +671,7 @@ export class CheatingDaddyApp extends LitElement {
     }
 
     async handleSendText(message) {
+        if (this._isPaused) return;
         const result = await window.cheatingDaddy.sendTextMessage(message);
         if (!result.success) {
             this.setStatus('Error sending message: ' + result.error);
@@ -674,6 +679,19 @@ export class CheatingDaddyApp extends LitElement {
             this.setStatus('Message sent...');
             this._awaitingNewResponse = true;
         }
+    }
+
+    handleTogglePause() {
+        if (!this.sessionActive) return;
+        this._isPaused = !this._isPaused;
+        if (this._isPaused) {
+            cheatingDaddy.stopCapture();
+            this.setStatus('Paused');
+        } else {
+            cheatingDaddy.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
+            this.setStatus('Resumed');
+        }
+        this.requestUpdate();
     }
 
     handleResponseIndexChanged(e) {
@@ -765,6 +783,8 @@ export class CheatingDaddyApp extends LitElement {
                         .selectedProfile=${this.selectedProfile}
                         .onSendText=${msg => this.handleSendText(msg)}
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
+                        .isPaused=${this._isPaused}
+                        .onTogglePause=${() => this.handleTogglePause()}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @response-animation-complete=${() => {
                             this.shouldAnimateResponse = false;

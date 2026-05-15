@@ -105,6 +105,7 @@ function getDefaultKeybinds() {
         scrollUp: isMac ? 'Cmd+Shift+Up' : 'Ctrl+Shift+Up',
         scrollDown: isMac ? 'Cmd+Shift+Down' : 'Ctrl+Shift+Down',
         emergencyErase: isMac ? 'Cmd+Shift+E' : 'Ctrl+Shift+E',
+        togglePause: 'Alt+X',
     };
 }
 
@@ -262,6 +263,19 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
             console.log(`Registered scrollDown: ${keybinds.scrollDown}`);
         } catch (error) {
             console.error(`Failed to register scrollDown (${keybinds.scrollDown}):`, error);
+        }
+    }
+
+    // Register pause/resume shortcut
+    if (keybinds.togglePause) {
+        try {
+            globalShortcut.register(keybinds.togglePause, () => {
+                console.log('Toggle pause shortcut triggered');
+                sendToRenderer('toggle-pause');
+            });
+            console.log(`Registered togglePause: ${keybinds.togglePause}`);
+        } catch (error) {
+            console.error(`Failed to register togglePause (${keybinds.togglePause}):`, error);
         }
     }
 

@@ -298,6 +298,38 @@ export class AssistantView extends LitElement {
             height: calc(100% + 2px);
             pointer-events: none;
         }
+
+        .pause-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0;
+            border-radius: 100px;
+            height: 32px;
+            width: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: border-color var(--transition), color var(--transition), background var(--transition);
+            flex-shrink: 0;
+        }
+
+        .pause-btn:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+            background: var(--bg-surface);
+        }
+
+        .pause-btn.paused {
+            border-color: var(--warning, #F59E0B);
+            color: var(--warning, #F59E0B);
+        }
+
+        .pause-btn svg {
+            width: 14px;
+            height: 14px;
+        }
     `;
 
     static properties = {
@@ -307,6 +339,8 @@ export class AssistantView extends LitElement {
         onSendText: { type: Function },
         shouldAnimateResponse: { type: Boolean },
         isAnalyzing: { type: Boolean, state: true },
+        isPaused: { type: Boolean },
+        onTogglePause: { type: Function },
     };
 
     constructor() {
@@ -316,6 +350,8 @@ export class AssistantView extends LitElement {
         this.selectedProfile = 'interview';
         this.onSendText = () => {};
         this.isAnalyzing = false;
+        this.isPaused = false;
+        this.onTogglePause = () => {};
         this._animFrame = null;
     }
 
@@ -456,6 +492,7 @@ export class AssistantView extends LitElement {
     }
 
     async handleSendText() {
+        if (this.isPaused) return;
         const textInput = this.shadowRoot.querySelector('#textInput');
         if (textInput && textInput.value.trim()) {
             const message = textInput.value.trim();
@@ -472,7 +509,7 @@ export class AssistantView extends LitElement {
     }
 
     async handleScreenAnswer() {
-        if (this.isAnalyzing) return;
+        if (this.isAnalyzing || this.isPaused) return;
         if (window.captureManualScreenshot) {
             this.isAnalyzing = true;
             this._responseCountWhenStarted = this.responses.length;
@@ -691,11 +728,22 @@ export class AssistantView extends LitElement {
                     <input
                         type="text"
                         id="textInput"
-                        placeholder="Type a message..."
+                        placeholder=${this.isPaused ? 'Paused — press Alt+X to resume' : 'Type a message...'}
+                        ?disabled=${this.isPaused}
                         @keydown=${this.handleTextKeydown}
                     />
                 </div>
-                <button class="analyze-btn ${this.isAnalyzing ? 'analyzing' : ''}" @click=${this.handleScreenAnswer}>
+                <button
+                    class="pause-btn ${this.isPaused ? 'paused' : ''}"
+                    @click=${() => this.onTogglePause()}
+                    title=${this.isPaused ? 'Resume (Alt+X)' : 'Pause (Alt+X)'}
+                >
+                    ${this.isPaused
+                        ? html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`
+                        : html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
+                    }
+                </button>
+                <button class="analyze-btn ${this.isAnalyzing || this.isPaused ? 'analyzing' : ''}" @click=${this.handleScreenAnswer} ?disabled=${this.isPaused}>
                     <canvas class="analyze-canvas"></canvas>
                     <span class="analyze-btn-content">
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
