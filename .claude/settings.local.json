@@ -3,7 +3,10 @@
     "allow": [
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Admin\\\\OneDrive - N-Labs AI Research and Learning Solutions Pvt Ltd\\\\Desktop\\\\GITHUB\\\\my-daddy\" -Force)",
       "Bash(Select-Object -First 30)",
-      "Bash(Format-Table -AutoSize)"
+      "Bash(Format-Table -AutoSize)",
+      "Bash(node -e \"const s = require\\('./src/storage'\\); console.log\\('claudeApiKey default:', s.getClaudeApiKey\\(\\)\\); console.log\\('selectedChatModel default:', s.getSelectedChatModel\\(\\)\\);\")",
+      "Bash(node -e \"const g = require\\('./src/utils/gemini'\\); console.log\\('gemini module loaded ok, exports:', Object.keys\\(g\\).join\\(', '\\)\\);\")",
+      "Bash(node -e \"const w = require\\('./src/utils/window'\\); console.log\\('Default keybinds:', JSON.stringify\\(w.getDefaultKeybinds\\(\\), null, 2\\)\\);\")"
     ]
   }
 }

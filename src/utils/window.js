@@ -106,6 +106,7 @@ function getDefaultKeybinds() {
         scrollDown: isMac ? 'Cmd+Shift+Down' : 'Ctrl+Shift+Down',
         emergencyErase: isMac ? 'Cmd+Shift+E' : 'Ctrl+Shift+E',
         togglePause: 'Alt+X',
+        toggleModelPicker: 'Alt+C',
     };
 }
 
@@ -276,6 +277,19 @@ function updateGlobalShortcuts(keybinds, mainWindow, sendToRenderer, geminiSessi
             console.log(`Registered togglePause: ${keybinds.togglePause}`);
         } catch (error) {
             console.error(`Failed to register togglePause (${keybinds.togglePause}):`, error);
+        }
+    }
+
+    // Register model picker shortcut
+    if (keybinds.toggleModelPicker) {
+        try {
+            globalShortcut.register(keybinds.toggleModelPicker, () => {
+                console.log('Toggle model picker shortcut triggered');
+                sendToRenderer('toggle-model-picker');
+            });
+            console.log(`Registered toggleModelPicker: ${keybinds.toggleModelPicker}`);
+        } catch (error) {
+            console.error(`Failed to register toggleModelPicker (${keybinds.toggleModelPicker}):`, error);
         }
     }
 

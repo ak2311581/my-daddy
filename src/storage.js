@@ -13,12 +13,14 @@ const DEFAULT_CONFIG = {
 
 const DEFAULT_CREDENTIALS = {
     apiKey: '',
-    groqApiKey: ''
+    groqApiKey: '',
+    claudeApiKey: ''
 };
 
 const DEFAULT_PREFERENCES = {
     customPrompt: '',
     providerMode: 'byok',
+    selectedChatModel: 'auto',
     selectedProfile: 'interview',
     selectedLanguage: 'en-US',
     selectedScreenshotInterval: '5',
@@ -203,6 +205,19 @@ function getGroqApiKey() {
 
 function setGroqApiKey(groqApiKey) {
     return setCredentials({ groqApiKey });
+}
+
+function getClaudeApiKey() {
+    return getCredentials().claudeApiKey || '';
+}
+function setClaudeApiKey(claudeApiKey) {
+    return setCredentials({ claudeApiKey });
+}
+function getSelectedChatModel() {
+    return getPreferences().selectedChatModel || 'auto';
+}
+function setSelectedChatModel(model) {
+    return updatePreference('selectedChatModel', model);
 }
 
 // ============ PREFERENCES ============
@@ -501,6 +516,10 @@ module.exports = {
     setApiKey,
     getGroqApiKey,
     setGroqApiKey,
+    getClaudeApiKey,
+    setClaudeApiKey,
+    getSelectedChatModel,
+    setSelectedChatModel,
 
     // Preferences
     getPreferences,

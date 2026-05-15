@@ -137,6 +137,25 @@ function setupStorageIpcHandlers() {
         }
     });
 
+    ipcMain.handle('storage:get-claude-api-key', async () => {
+        try {
+            return { success: true, data: storage.getClaudeApiKey() };
+        } catch (error) {
+            console.error('Error getting Claude API key:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
+    ipcMain.handle('storage:set-claude-api-key', async (event, claudeApiKey) => {
+        try {
+            storage.setClaudeApiKey(claudeApiKey);
+            return { success: true };
+        } catch (error) {
+            console.error('Error setting Claude API key:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     // ============ PREFERENCES ============
     ipcMain.handle('storage:get-preferences', async () => {
         try {

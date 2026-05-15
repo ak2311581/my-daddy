@@ -6,6 +6,7 @@ export class AssistantView extends LitElement {
             height: 100%;
             display: flex;
             flex-direction: column;
+            position: relative;
         }
 
         * {
@@ -330,6 +331,115 @@ export class AssistantView extends LitElement {
             width: 14px;
             height: 14px;
         }
+
+        .model-badge {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0 10px;
+            border-radius: 100px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            font-size: var(--font-size-xs);
+            font-family: var(--font-mono);
+            white-space: nowrap;
+            transition: border-color var(--transition), color var(--transition);
+            flex-shrink: 0;
+            gap: 4px;
+        }
+
+        .model-badge:hover {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+
+        .model-badge.picker-open {
+            border-color: var(--accent);
+            color: var(--text-primary);
+        }
+
+        .model-picker {
+            position: absolute;
+            bottom: 68px;
+            left: var(--space-md);
+            right: var(--space-md);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            z-index: 100;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+        }
+
+        .model-picker-header {
+            padding: 8px 12px 6px;
+            font-size: var(--font-size-xs);
+            font-weight: var(--font-weight-semibold);
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .model-group {
+            padding: 4px 0;
+        }
+
+        .model-group-label {
+            padding: 6px 12px 2px;
+            font-size: 10px;
+            font-weight: var(--font-weight-semibold);
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .model-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            padding: 6px 12px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            text-align: left;
+            transition: background var(--transition);
+            gap: var(--space-sm);
+        }
+
+        .model-option:hover {
+            background: var(--bg-hover);
+        }
+
+        .model-option.active {
+            background: var(--bg-elevated);
+        }
+
+        .model-option-name {
+            font-size: var(--font-size-sm);
+            color: var(--text-primary);
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+
+        .model-option.active .model-option-name {
+            color: var(--accent);
+        }
+
+        .model-option-desc {
+            font-size: var(--font-size-xs);
+            color: var(--text-muted);
+        }
+
+        .model-option-check {
+            width: 14px;
+            height: 14px;
+            flex-shrink: 0;
+            color: var(--accent);
+        }
     `;
 
     static properties = {
@@ -341,6 +451,10 @@ export class AssistantView extends LitElement {
         isAnalyzing: { type: Boolean, state: true },
         isPaused: { type: Boolean },
         onTogglePause: { type: Function },
+        activeModel: { type: String },
+        availableModels: { type: Array },
+        onChangeModel: { type: Function },
+        _showModelPicker: { state: true },
     };
 
     constructor() {
@@ -352,6 +466,10 @@ export class AssistantView extends LitElement {
         this.isAnalyzing = false;
         this.isPaused = false;
         this.onTogglePause = () => {};
+        this.activeModel = 'auto';
+        this.availableModels = [];
+        this.onChangeModel = () => {};
+        this._showModelPicker = false;
         this._animFrame = null;
     }
 
@@ -475,6 +593,12 @@ export class AssistantView extends LitElement {
             ipcRenderer.on('navigate-next-response', this.handleNextResponse);
             ipcRenderer.on('scroll-response-up', this.handleScrollUp);
             ipcRenderer.on('scroll-response-down', this.handleScrollDown);
+
+            this.handleToggleModelPicker = () => {
+                this._showModelPicker = !this._showModelPicker;
+                this.requestUpdate();
+            };
+            ipcRenderer.on('toggle-model-picker', this.handleToggleModelPicker);
         }
     }
 
@@ -488,6 +612,7 @@ export class AssistantView extends LitElement {
             if (this.handleNextResponse) ipcRenderer.removeListener('navigate-next-response', this.handleNextResponse);
             if (this.handleScrollUp) ipcRenderer.removeListener('scroll-response-up', this.handleScrollUp);
             if (this.handleScrollDown) ipcRenderer.removeListener('scroll-response-down', this.handleScrollDown);
+            if (this.handleToggleModelPicker) ipcRenderer.removeListener('toggle-model-picker', this.handleToggleModelPicker);
         }
     }
 
@@ -701,6 +826,51 @@ export class AssistantView extends LitElement {
         }
     }
 
+    _getModelShortLabel(modelId) {
+        const labels = {
+            'auto': 'Auto',
+            'claude-opus-4-7': 'Opus 4.7',
+            'claude-sonnet-4-6': 'Sonnet 4.6',
+            'claude-haiku-4-5-20251001': 'Haiku 4.5',
+            'qwen/qwen3-32b': 'Qwen3 32B',
+            'openai/gpt-oss-120b': 'GPT-OSS 120B',
+            'moonshotai/kimi-k2-instruct': 'Kimi K2',
+            'gemma-3-27b-it': 'Gemma 3 27B',
+        };
+        return labels[modelId] || modelId || 'Auto';
+    }
+
+    _renderModelPicker() {
+        const checkIcon = html`<svg class="model-option-check" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>`;
+
+        const groups = {};
+        for (const m of this.availableModels) {
+            if (!groups[m.provider]) groups[m.provider] = [];
+            groups[m.provider].push(m);
+        }
+
+        return html`
+            <div class="model-picker">
+                <div class="model-picker-header">Select Model · Alt+C</div>
+                ${Object.entries(groups).map(([provider, models]) => html`
+                    <div class="model-group">
+                        <div class="model-group-label">${provider}</div>
+                        ${models.map(m => html`
+                            <button
+                                class="model-option ${m.id === this.activeModel ? 'active' : ''}"
+                                @click=${() => { this.onChangeModel(m.id); this._showModelPicker = false; }}
+                            >
+                                <span class="model-option-name">${m.label}</span>
+                                ${m.description ? html`<span class="model-option-desc">${m.description}</span>` : ''}
+                                ${m.id === this.activeModel ? checkIcon : ''}
+                            </button>
+                        `)}
+                    </div>
+                `)}
+            </div>
+        `;
+    }
+
     render() {
         const hasMultipleResponses = this.responses.length > 1;
 
@@ -723,6 +893,7 @@ export class AssistantView extends LitElement {
                 </div>
             ` : ''}
 
+            ${this._showModelPicker && this.availableModels.length > 0 ? this._renderModelPicker() : ''}
             <div class="input-bar">
                 <div class="input-bar-inner">
                     <input
@@ -743,6 +914,16 @@ export class AssistantView extends LitElement {
                         : html`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
                     }
                 </button>
+                ${this.availableModels.length > 0 ? html`
+                    <button
+                        class="model-badge ${this._showModelPicker ? 'picker-open' : ''}"
+                        @click=${() => { this._showModelPicker = !this._showModelPicker; }}
+                        title="Change model (Alt+C)"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3v7h6l-8 11v-7H5z"/></svg>
+                        ${this._getModelShortLabel(this.activeModel)}
+                    </button>
+                ` : ''}
                 <button class="analyze-btn ${this.isAnalyzing || this.isPaused ? 'analyzing' : ''}" @click=${this.handleScreenAnswer} ?disabled=${this.isPaused}>
                     <canvas class="analyze-canvas"></canvas>
                     <span class="analyze-btn-content">

@@ -56,6 +56,13 @@ const storage = {
     async setGroqApiKey(groqApiKey) {
         return ipcRenderer.invoke('storage:set-groq-api-key', groqApiKey);
     },
+    async getClaudeApiKey() {
+        const result = await ipcRenderer.invoke('storage:get-claude-api-key');
+        return result.success ? result.data : '';
+    },
+    async setClaudeApiKey(claudeApiKey) {
+        return ipcRenderer.invoke('storage:set-claude-api-key', claudeApiKey);
+    },
 
     // Preferences
     async getPreferences() {
@@ -193,6 +200,13 @@ async function initializeCloud(profile = 'interview') {
 ipcRenderer.on('update-status', (event, status) => {
     console.log('Status update:', status);
     cheatingDaddy.setStatus(status);
+});
+
+ipcRenderer.on('active-model-changed', (event, model) => {
+    if (cheatingDaddyApp) {
+        cheatingDaddyApp._activeModel = model;
+        cheatingDaddyApp.requestUpdate();
+    }
 });
 
 async function startCapture(screenshotIntervalSeconds = 5, imageQuality = 'medium') {

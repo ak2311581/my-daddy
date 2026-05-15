@@ -364,6 +364,8 @@ export class CheatingDaddyApp extends LitElement {
         _updateAvailable: { state: true },
         _whisperDownloading: { state: true },
         _isPaused: { state: true },
+        _activeModel: { state: true },
+        _availableModels: { state: true },
     };
 
     constructor() {
@@ -390,6 +392,8 @@ export class CheatingDaddyApp extends LitElement {
         this._updateAvailable = false;
         this._whisperDownloading = false;
         this._isPaused = false;
+        this._activeModel = 'auto';
+        this._availableModels = [];
         this._localVersion = '';
 
         this._loadFromStorage();
@@ -454,6 +458,10 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.on('reconnect-failed', (_, data) => this.addNewResponse(data.message));
             ipcRenderer.on('whisper-downloading', (_, downloading) => { this._whisperDownloading = downloading; });
             ipcRenderer.on('toggle-pause', () => this.handleTogglePause());
+            ipcRenderer.on('active-model-changed', (_, model) => {
+                this._activeModel = model;
+                this.requestUpdate();
+            });
         }
     }
 
@@ -469,6 +477,7 @@ export class CheatingDaddyApp extends LitElement {
             ipcRenderer.removeAllListeners('reconnect-failed');
             ipcRenderer.removeAllListeners('whisper-downloading');
             ipcRenderer.removeAllListeners('toggle-pause');
+            ipcRenderer.removeAllListeners('active-model-changed');
         }
     }
 
@@ -619,6 +628,9 @@ export class CheatingDaddyApp extends LitElement {
         this.sessionActive = true;
         this.currentView = 'assistant';
         this._startTimer();
+        this._availableModels = await this._buildAvailableModels();
+        const prefs = await cheatingDaddy.storage.getPreferences();
+        this._activeModel = prefs.selectedChatModel || 'auto';
     }
 
     async handleAPIKeyHelp() {
@@ -691,6 +703,45 @@ export class CheatingDaddyApp extends LitElement {
             cheatingDaddy.startCapture(this.selectedScreenshotInterval, this.selectedImageQuality);
             this.setStatus('Resumed');
         }
+        this.requestUpdate();
+    }
+
+    async _buildAvailableModels() {
+        try {
+            const [creds, apiKey] = await Promise.all([
+                cheatingDaddy.storage.getCredentials(),
+                cheatingDaddy.storage.getApiKey(),
+            ]);
+
+            const models = [{ id: 'auto', label: 'Auto', provider: 'System', description: 'Best available' }];
+
+            if (creds.claudeApiKey) {
+                models.push(
+                    { id: 'claude-opus-4-7', label: 'Opus 4.7', provider: 'Claude', description: 'Most capable' },
+                    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', provider: 'Claude', description: 'Balanced' },
+                    { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', provider: 'Claude', description: 'Fastest' },
+                );
+            }
+            if (creds.groqApiKey) {
+                models.push(
+                    { id: 'qwen/qwen3-32b', label: 'Qwen3 32B', provider: 'Groq', description: 'Fast reasoning' },
+                    { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', provider: 'Groq', description: 'Large model' },
+                    { id: 'moonshotai/kimi-k2-instruct', label: 'Kimi K2', provider: 'Groq', description: 'Multilingual' },
+                );
+            }
+            if (apiKey) {
+                models.push({ id: 'gemma-3-27b-it', label: 'Gemma 3 27B', provider: 'Gemini', description: 'Free tier' });
+            }
+
+            return models;
+        } catch {
+            return [];
+        }
+    }
+
+    async handleModelChange(modelId) {
+        await cheatingDaddy.storage.updatePreference('selectedChatModel', modelId);
+        this._activeModel = modelId;
         this.requestUpdate();
     }
 
@@ -785,6 +836,9 @@ export class CheatingDaddyApp extends LitElement {
                         .shouldAnimateResponse=${this.shouldAnimateResponse}
                         .isPaused=${this._isPaused}
                         .onTogglePause=${() => this.handleTogglePause()}
+                        .availableModels=${this._availableModels}
+                        .activeModel=${this._activeModel}
+                        .onChangeModel=${id => this.handleModelChange(id)}
                         @response-index-changed=${this.handleResponseIndexChanged}
                         @response-animation-complete=${() => {
                             this.shouldAnimateResponse = false;

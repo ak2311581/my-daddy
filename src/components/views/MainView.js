@@ -495,6 +495,7 @@ export class MainView extends LitElement {
         _tokenError: { state: true },
         _keyError: { state: true },
         // Local AI state
+        _claudeKey: { state: true },
         _ollamaHost: { state: true },
         _ollamaModel: { state: true },
         _whisperModel: { state: true },
@@ -514,6 +515,7 @@ export class MainView extends LitElement {
         this._token = '';
         this._geminiKey = '';
         this._groqKey = '';
+        this._claudeKey = '';
         this._openaiKey = '';
         this._tokenError = false;
         this._keyError = false;
@@ -549,6 +551,7 @@ export class MainView extends LitElement {
             this._token = creds.cloudToken || '';
             this._geminiKey = await cheatingDaddy.storage.getApiKey().catch(() => '') || '';
             this._groqKey = await cheatingDaddy.storage.getGroqApiKey().catch(() => '') || '';
+            this._claudeKey = await cheatingDaddy.storage.getClaudeApiKey().catch(() => '') || '';
             this._openaiKey = creds.openaiKey || '';
 
             // Load local AI settings
@@ -716,6 +719,12 @@ export class MainView extends LitElement {
         this.requestUpdate();
     }
 
+    async _saveClaudeKey(val) {
+        this._claudeKey = val;
+        await cheatingDaddy.storage.setClaudeApiKey(val);
+        this.requestUpdate();
+    }
+
     async _saveOpenaiKey(val) {
         this._openaiKey = val;
         try {
@@ -844,6 +853,20 @@ export class MainView extends LitElement {
                 />
                 <div class="form-hint">
                     <span class="link" @click=${() => this.onExternalLink('https://console.groq.com/keys')}>Get Groq key</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Claude API Key <span style="opacity:0.5;font-weight:400;text-transform:none;letter-spacing:0">Optional</span></label>
+                <input
+                    type="password"
+                    placeholder="sk-ant-..."
+                    .value=${this._claudeKey}
+                    @input=${e => this._saveClaudeKey(e.target.value)}
+                />
+                <div class="form-hint">
+                    <span class="link" @click=${() => this.onExternalLink('https://console.anthropic.com/settings/keys')}>Get Claude key</span>
+                    · enables Claude as text provider
                 </div>
             </div>
 

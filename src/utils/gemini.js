@@ -3,7 +3,7 @@ const { BrowserWindow, ipcMain } = require('electron');
 const { spawn } = require('child_process');
 const { saveDebugAudio } = require('../audioUtils');
 const { getSystemPrompt } = require('./prompts');
-const { getAvailableModel, incrementLimitCount, getApiKey, getGroqApiKey, incrementCharUsage, getModelForToday } = require('../storage');
+const { getAvailableModel, incrementLimitCount, getApiKey, getGroqApiKey, incrementCharUsage, getModelForToday, getClaudeApiKey, getSelectedChatModel } = require('../storage');
 const { connectCloud, sendCloudAudio, sendCloudText, sendCloudImage, closeCloud, isCloudActive, setOnTurnComplete } = require('./cloud');
 
 // Lazy-loaded to avoid circular dependency (localai.js imports from gemini.js)
@@ -204,6 +204,124 @@ async function getStoredSetting(key, defaultValue) {
 function hasGroqKey() {
     const key = getGroqApiKey();
     return key && key.trim() != ''
+}
+
+function hasClaudeKey() {
+    const key = getClaudeApiKey();
+    return key && key.trim() !== '';
+}
+
+function resolveTextModel() {
+    const selected = getSelectedChatModel();
+    const claudeKey = getClaudeApiKey();
+    const groqKey = getGroqApiKey();
+
+    if (selected !== 'auto') {
+        if (selected.startsWith('claude-') && claudeKey) {
+            return { provider: 'claude', model: selected };
+        }
+        if (selected === 'gemma-3-27b-it') {
+            return { provider: 'gemma', model: selected };
+        }
+        if (groqKey) {
+            return { provider: 'groq', model: selected };
+        }
+    }
+
+    // auto mode
+    if (claudeKey) return { provider: 'claude', model: 'claude-sonnet-4-6' };
+    if (groqKey) return { provider: 'groq', model: getModelForToday() || 'qwen/qwen3-32b' };
+    return { provider: 'gemma', model: 'gemma-3-27b-it' };
+}
+
+async function sendToClaude(transcription, model) {
+    const claudeApiKey = getClaudeApiKey();
+    if (!claudeApiKey || !transcription || !transcription.trim()) return;
+
+    groqConversationHistory.push({ role: 'user', content: transcription.trim() });
+    if (groqConversationHistory.length > 20) {
+        groqConversationHistory = groqConversationHistory.slice(-20);
+    }
+
+    console.log(`Sending to Claude (${model}):`, transcription.substring(0, 100) + '...');
+
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'x-api-key': claudeApiKey,
+                'anthropic-version': '2023-06-01',
+                'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+                model,
+                max_tokens: 1024,
+                system: currentSystemPrompt || 'You are a helpful assistant.',
+                messages: groqConversationHistory,
+                stream: true,
+            }),
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Claude API error:', response.status, errorText);
+            sendToRenderer('update-status', `Claude error: ${response.status}`);
+            return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let isFirst = true;
+        let lineBuffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            lineBuffer += decoder.decode(value, { stream: true });
+            const lines = lineBuffer.split('\n');
+            lineBuffer = lines.pop();
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const data = line.slice(6).trim();
+                if (!data) continue;
+                try {
+                    const json = JSON.parse(data);
+                    if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+                        fullText += json.delta.text;
+                        sendToRenderer(isFirst ? 'new-response' : 'update-response', fullText);
+                        isFirst = false;
+                    }
+                } catch {}
+            }
+        }
+
+        if (fullText.trim()) {
+            groqConversationHistory.push({ role: 'assistant', content: fullText.trim() });
+            if (groqConversationHistory.length > 40) {
+                groqConversationHistory = groqConversationHistory.slice(-40);
+            }
+            saveConversationTurn(transcription, fullText);
+        }
+
+        console.log(`Claude response completed (${model})`);
+        sendToRenderer('update-status', 'Listening...');
+    } catch (error) {
+        console.error('Error calling Claude API:', error);
+        sendToRenderer('update-status', 'Claude error: ' + error.message);
+    }
+}
+
+async function dispatchTextResponse(transcription) {
+    const { provider, model } = resolveTextModel();
+    sendToRenderer('active-model-changed', model);
+    if (provider === 'claude') {
+        await sendToClaude(transcription, model);
+    } else if (provider === 'groq') {
+        await sendToGroq(transcription);
+    } else {
+        await sendToGemma(transcription);
+    }
 }
 
 function trimConversationHistoryForGemma(history, maxChars=42000) {
@@ -487,11 +605,7 @@ async function initializeGeminiSession(apiKey, customPrompt = '', profile = 'int
 
                     if (message.serverContent?.generationComplete) {
                         if (currentTranscription.trim() !== '') {
-                            if (hasGroqKey()) {
-                                sendToGroq(currentTranscription);
-                            } else {
-                                sendToGemma(currentTranscription);
-                            }
+                            dispatchTextResponse(currentTranscription);
                             currentTranscription = '';
                         }
                         messageBuffer = '';
@@ -1012,11 +1126,7 @@ function setupGeminiIpcHandlers(geminiSessionRef) {
         try {
             console.log('Sending text message:', text);
 
-            if (hasGroqKey()) {
-                sendToGroq(text.trim());
-            } else {
-                sendToGemma(text.trim());
-            }
+            dispatchTextResponse(text.trim());
 
             await geminiSessionRef.current.sendRealtimeInput({ text: text.trim() });
             return { success: true };
